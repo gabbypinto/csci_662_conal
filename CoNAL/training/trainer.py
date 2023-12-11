@@ -242,3 +242,60 @@ class CCLTrainer(AugmentedTrainer):
             )
 
         return (loss, outputs) if return_outputs else loss
+    
+class FocalLossTrainer(AugmentedTrainer):
+    """
+    Train with an ID dataset and Focal Loss
+    """
+    
+    def focal_loss(self, logits, labels, gamma=2.0, alpha=1.0):
+        """
+        Compute the Focal Loss
+        """
+        softmax_probs = F.softmax(logits, dim=-1)
+        class_probs = torch.gather(softmax_probs, dim=-1, index=labels.unsqueeze(-1)).squeeze(-1)
+        focal_factor = (1.0 - class_probs)**gamma
+        focal_loss = -alpha * focal_factor * torch.log(class_probs + 1e-6)  # Added epsilon to avoid log(0)
+        return focal_loss.mean()
+
+    def compute_loss(self, model, inputs, return_outputs=False):
+        """
+        Focal loss for in-distribution examples
+        """
+        
+        # if "labels" in inputs:
+        #     labels = inputs.pop("labels")
+        # else:
+        #     labels = None
+
+
+
+        # Split inputs into inputs_dict and inputs_dict_ood
+        inputs_dict, inputs_dict_ood = inputs
+        if self.label_smoother is not None and "labels" in inputs:
+            labels = inputs.pop("labels")
+        else:
+            labels = None
+
+        outputs = model(**inputs_dict)
+        
+        if labels is not None:
+            id_loss = self.focal_loss(outputs['logits'], labels)
+        else:
+            id_loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+        
+        # No need to compute OOD Loss for FocalLossTrainer, so no CCL loss component
+        
+        loss = id_loss
+
+
+        # Log if necessary
+        if self.do_loss_logging:
+            self.control = self.wandb_cbh.on_log(
+                self.args, self.state, self.control, {"id_loss": id_loss}
+            )
+            self.control = self.wandb_cbh.on_log(
+                self.args, self.state, self.control, {"total_loss": loss}
+            )
+        
+        return (loss, outputs) if return_outputs else loss
