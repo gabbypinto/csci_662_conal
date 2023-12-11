@@ -110,13 +110,29 @@ class ExampleGenerator:
             pbar.refresh()
             prompt = prompt_base
             # Add Context
-            for _ in range(context_per_class):
-                for i, cls in enumerate(id_classes):
-                    if max_num_context is not None and i >= max_num_context:
-                        break
-                    example = random.choice(grouped_train_examples[cls])
-                    label_name = class2label[cls]
-                    prompt += f"{label_name}\n{example}\n"
+            # one example only
+            if context_per_class == -1:
+                i = random.randint(0,len(id_classes)-1)
+                cls = id_classes[i]
+                if max_num_context is not None and i >= max_num_context:
+                    continue
+                example = random.choice(grouped_train_examples[cls])
+                label_name = class2label[cls]
+                prompt += f"{label_name}\n{example}\n"
+            # add context from each class
+            else:
+                for _ in range(context_per_class):
+                    if not max_len_reached:
+                        for i, cls in enumerate(id_classes):
+                            if max_num_context is not None and i >= max_num_context:
+                                break
+                            example = random.choice(grouped_train_examples[cls])
+                            label_name = class2label[cls]
+                            prompt += f"{label_name}\n{example}\n"
+                            # avoid out of memory errors
+                            if len(prompt) >= 2700:
+                                max_len_reached = True
+                                break
             # Add Final Label
             ood_label = random.choice(ood_labels)
             prompt += f"{ood_label}\n"
